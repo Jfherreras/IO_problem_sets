@@ -1,0 +1,224 @@
+\documentclass[11pt]{article}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{siunitx}
+\geometry{margin=1in}
+\sisetup{round-mode=places,round-precision=3,group-separator={,}}
+
+\title{Empirical IO I — Pay-TV Homework (Python / pyBLP) \\ \large Assignment 3 Writeup}
+\date{}
+
+\begin{document}
+	\maketitle
+	
+	\section*{Exercises 1-3: simulating data}
+	We simulate $T=600$ markets with $J=4$ single-product firms (1--2 satellite, 3--4 wired). Utility is
+	$\delta_{jt}=\beta_x x_{jt} + \alpha p_{jt} + \xi_{jt}$ and costs obey $\ln mc_{jt}=\gamma_0+\gamma_1 w_{jt} + \omega_{jt}/8$.
+	Random coefficients are on technology dummies (satellite, wired). Equilibrium prices are solved two ways:
+	(i) root-finding on first-order conditions, and (ii) Morrow--Skerlos $\zeta$-iteration. Observed shares are
+	constructed at the Morrow--Skerlos equilibrium and then used for OLS logit, 2SLS logit, and 2SLS nested logit.
+	Finally we estimate a random-coefficients logit with \texttt{pyBLP} (demand-only, joint with supply, and optimal-IV),
+	compute elasticities/diversion ratios, and simulate mergers with and without efficiencies.
+	
+	\paragraph{Numerical check.}
+	The two price solvers agree almost perfectly: $\max |\Delta p|=5.373\times 10^{-8}$.
+	
+	\section*{Exercise 4-6: Plain Logit vs Nested Logit (2SLS)}
+	Let $y_{jt}=\log s_{jt}-\log s_{0t}$. The plain logit restricts substitution via IIA across all inside goods.
+	Nested logit allows correlation within \emph{wired} and \emph{satellite} nests with separate $\sigma$'s.
+	
+	\begin{table}[h!]
+		\centering
+		\caption{Plain logit estimates: OLS vs 2SLS}
+		\label{tab:plain}
+		\begin{tabular}{lrr}
+			\toprule
+			Model & $\beta_x$ & $\alpha$ \\
+			\midrule
+			OLS   & 0.839 & -0.781 \\
+			2SLS  & 1.195 & -0.921 \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\begin{table}[h!]
+		\centering
+		\caption{Nested logit (2SLS)}
+		\label{tab:nested}
+		\begin{tabular}{lrrrr}
+			\toprule
+			Model & $\beta_x$ & $\alpha$ & $\sigma_{\text{sat}}$ & $\sigma_{\text{wired}}$ \\
+			\midrule
+			Nested 2SLS & 0.627 & -0.514 & 0.707 & 0.685 \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\noindent
+	\textbf{Discussion.} OLS understates the (negative) price slope due to endogeneity. 2SLS steepens price but,
+	since logit is misspecified relative to the DGP (true model has within-technology correlation and heterogeneity),
+	it remains too shallow in magnitude. The nested model recovers meaningful within-group correlation ($\sigma$'s near
+	$0.7$) but still inherits misspecification (and endogeneity of within-nest share regressors), leaving $\alpha$ far from $-2$.
+	
+	\section*{Exercises 7-Elasticities and Diversion Ratios (True vs Nested)}
+	We compute ``true'' elasticities from the simulated Jacobian (averaged over random-coefficient draws)
+	and compare to nested-logit finite-difference elasticities. Results are averaged across markets.
+	
+	\begin{table}[h!]
+		\centering
+		\caption{Average own-price elasticities}
+		\label{tab:own}
+		\begin{tabular}{lrrrr}
+			\toprule
+			& Good 1 & Good 2 & Good 3 & Good 4 \\
+			\midrule
+			True           & -5.300 & -5.366 & -5.297 & -5.267 \\
+			Nested estimate& -4.93 &  -5.007 & -4.587 & -4.572 \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\begin{table}[h!]
+		\centering
+		\caption{Average diversion ratios across markets (True)}
+		\label{tab:divtrue}
+		\begin{tabular}{lrrrr}
+			\toprule
+			From $\backslash$ To & 1 & 2 & 3 & 4 \\
+			\midrule
+			1 & 0.000 & 0.195 & 0.120 & 0.119 \\
+			2 & 0.196 & 0.000 & 0.121 & 0.123 \\
+			3 & 0.121 & 0.119 & 0.000 & 0.194 \\
+			4 & 0.128 & 0.128 & 0.202 & 0.000 \\
+		
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\begin{table}[h!]
+		\centering
+		\caption{Average diversion ratios across markets (Nested estimate)}
+		\label{tab:divnest}
+		\begin{tabular}{lrrrr}
+			\toprule
+			From $\backslash$ To & 1 & 2 & 3 & 4 \\
+			\midrule
+			1 & 0.  &  0.129 & 0.137 & 0.137 \\
+			2 & 0.127 & 0.  &  0.134 & 0.136 \\
+			3 & 0.135 & 0.133 & 0. &   0.127 \\
+			4 & 0.141  & 0.141 & 0.133 & 0.  \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\noindent
+	Both the true and nested estimates show stronger within-technology diversion
+	(1$\leftrightarrow$2, 3$\leftrightarrow$4). The nested model understates price sensitivity (own elasticities in absolute
+	value are too small) and over-concentrates diversion within nests. Note: for interpretation, in tables 4 and 5 I exclude the outside option and thus the diagonal of the diversion ratios matrix is full of 0s, otherwise it would show up the fraction of consumers switching to the outside option after a price increase.
+	
+	\section*{Exercise 8-9}
+	We estimate three specifications: demand-only, joint demand+supply, and feasible optimal IV.
+	Table~\ref{tab:blp} reports means (standard errors). The demand-only and joint runs pin down
+	$\alpha$ near $-2$; optimal IV shifts the taste dispersion downward (as often happens when the optimal IV
+	set is highly collinear with existing instruments).
+	
+	\begin{table}[h!]
+		\centering
+		\caption{pyBLP estimates (mean utility and satellite heterogeneity)}
+		\label{tab:blp}
+		\begin{tabular}{lrrrr}
+			\toprule
+			Spec & $\beta_x$ & $\alpha$ & mean(sat) & sd(sat) \\
+			\midrule
+			 Demand-only  &  0.957 (0.047) &  -1.962 (0.094) & -1.073 (0.224) & 2.643 (0.377) \\
+			Joint (supply) & 0.957 (0.047)& -1.963 (0.094), & -1.073 (0.224) &  2.642 (0.377) \\
+			Optimal IV       & 0.827 (0.032) & -1.800 (0.064)& -0.056 (0.057) & 0.405 (0.227) \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\begin{table}[h!]
+		\centering
+		\caption{pyBLP average own-price elasticities}
+		\label{tab:blpown}
+		\begin{tabular}{lrrrr}
+			\toprule
+			& Good 1 & Good 2 & Good 3 & Good 4 \\
+			\midrule
+			Estimated & -4.444 & -4.515 & -5.336 & -5.305 \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\begin{table}[h!]
+		\centering
+		\caption{pyBLP average diversion ratios (estimated)}
+		\label{tab:blpdiv}
+		\begin{tabular}{lrrrr}
+			\toprule
+			From $\backslash$ To & 1 & 2 & 3 & 4 \\
+			\midrule
+			1 & 0.000 & 0.377 & 0.080 & 0.080 \\
+			2 & 0.375 & 0.000 & 0.081 & 0.082 \\
+			3 & 0.110 & 0.106 & 0.000 & 0.166 \\
+			4 & 0.115 & 0.116 & 0.174 & 0.000 \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\noindent
+	\textbf{Comparison to nested.} The random-coefficients model relaxes IIA within nests and
+	recovers elasticities much closer to the simulated truth, as expected.
+	
+	\newpage
+	\section*{Exercises 10-15: Merger Simulations}
+	We use the joint pyBLP estimates as the baseline. Prices are averaged across markets by within-market
+	product index.
+	
+	\textbf{Exercise 10} Theory would point out at merger-depending prices changes. If the merge is done for goods that are in the same nest, we expect the increase of prices within the nest to be higher (e.g. wire merger) since the post-merger firm will have a monopoly. If the merger is across nests, then prices shouldn't be affected much, since competition across markets is preserved.
+	
+	\textbf{Exercise 11}
+	\begin{table}[h!]
+		\centering
+		\caption{Average pre- and post-merger prices by product}
+		\label{tab:mergerlevels}
+		\begin{tabular}{lrrrr}
+			\toprule
+			& Good 1 & Good 2 & Good 3 & Good 4 \\
+			\midrule
+			Pre-merger           & 3.175 & 3.217 & 3.170 & 3.182 \\
+			Post-merger (1--2)   & 3.584 & 3.621 & 3.172 & 3.185 \\
+			Post-merger (1--3)   & 3.236 & 3.224 & 3.240 & 3.184 \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\begin{table}[h!]
+		\centering
+		\caption{Average merger-induced price changes}
+		\label{tab:mergerdeltas}
+		\begin{tabular}{lrrrr}
+			\toprule
+			& Good 1 & Good 2 & Good 3 & Good 4 \\
+			\midrule
+			$\Delta p$ (1--2)           & 0.409 & 0.403 & 0.002 & 0.002 \\
+			$\Delta p$ (1--3)           & 0.061 & 0.007 & 0.070 & 0.001 \\
+			Difference (1--2 minus 1--3)& 0.348 & 0.396 & -0.068 & 0.001 \\
+			\bottomrule
+		\end{tabular}
+	\end{table}
+	
+	\noindent
+	The 1--2 merger (same technology) induces much larger price rises on the merging goods than
+	the 1--3 merger, in line with the stronger within-nest diversion documented above.
+	
+	\paragraph{Efficiencies (15\% cost reduction on products 1 \& 2).}
+	Under merger-specific efficiencies, average price changes for the 1--2 merger are
+	$[0.145,\ 0.134,\ 0.000,\ 0.000]$, and the average per-consumer change in consumer surplus is $-0.013$.
+	In this calibration, the cost savings are not large enough to fully offset the upward pricing pressure on the merging goods.
+	
+	\textbf{Exercise 15} The assumption of total measure of consumers $M_t$ being the same for each markets buys linearity, and thus without loss of generality we can normalize to 1 and pin down the levels. If the measurement are different across markets, we cannot aggregate with a simple sum, at the end we need to consider the relative shares of the mass of consumers for each market to have an accurate welfare function.
+	
+	
+\end{document}
